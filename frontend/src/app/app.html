@@ -1,0 +1,59 @@
+<div class="page">
+  <header>
+    <h1>Tic Tac Toe</h1>
+    <div class="mode-toggle" role="group" aria-label="Game mode">
+      <button
+        type="button"
+        [class.active]="state()?.gameMode === 'TWO_PLAYER'"
+        (click)="startNewGame('TWO_PLAYER')"
+      >
+        Two Player
+      </button>
+      <button
+        type="button"
+        [class.active]="state()?.gameMode === 'VS_COMPUTER'"
+        (click)="startNewGame('VS_COMPUTER')"
+      >
+        Play Against Computer
+      </button>
+    </div>
+  </header>
+
+  @if (errorMessage(); as error) {
+    <div class="error-banner" role="alert">
+      <span>{{ error }}</span>
+      <button type="button" (click)="dismissError()" aria-label="Dismiss error">&times;</button>
+    </div>
+  }
+
+  @if (state(); as game) {
+    <p class="status" [class.won]="game.status === 'Won'" [class.draw]="game.status === 'Draw'">
+      {{ statusMessage() }}
+    </p>
+
+    <div class="game-area">
+      <div class="board-column">
+        <app-board
+          [board]="game.board"
+          [winningCells]="game.winningCells"
+          [disabled]="boardDisabled()"
+          (cellClicked)="onCellClicked($event)"
+        />
+
+        <div class="controls">
+          <button type="button" (click)="onUndo()" [disabled]="!game.canUndo">
+            Undo Last Move
+          </button>
+          <button type="button" (click)="onResetGame()">Reset Game</button>
+        </div>
+      </div>
+
+      <div class="side-column">
+        <app-scoreboard [scoreboard]="game.scoreboard" (resetScoreboard)="onResetScoreboard()" />
+        <app-move-history [moves]="game.moveHistory" />
+      </div>
+    </div>
+  } @else {
+    <p class="status">{{ statusMessage() }}</p>
+  }
+</div>

@@ -1,0 +1,43 @@
+.scoreboard {
+  background: #1f2430;
+  border-radius: 12px;
+  padding: 16px 20px;
+  color: #f4f6fb;
+  min-width: 200px;
+}
+
+h2 {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.95rem;
+}
+
+.value {
+  font-weight: 700;
+}
+
+.reset-btn {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #4a5268;
+  background: transparent;
+  color: #f4f6fb;
+  cursor: pointer;
+}
+
+.reset-btn:hover {
+  background: #2c3242;
+}

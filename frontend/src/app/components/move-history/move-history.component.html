@@ -1,0 +1,16 @@
+<section class="history" aria-label="Move history">
+  <h2>Move History</h2>
+  @if (moves().length === 0) {
+    <p class="empty">No moves yet.</p>
+  } @else {
+    <ol>
+      @for (move of moves(); track move.moveNumber) {
+        <li>
+          <span class="move-number">{{ move.moveNumber }}.</span>
+          <span class="player" [class.player-x]="move.player === 'X'" [class.player-o]="move.player === 'O'">{{ move.player }}</span>
+          <span class="position">{{ positionLabel(move) }}</span>
+        </li>
+      }
+    </ol>
+  }
+</section>

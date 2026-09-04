@@ -1,0 +1,209 @@
+{
+  "info": {
+    "name": "Tic Tac Toe API",
+    "description": "REST API for the session-based Tic Tac Toe backend (Java/Spring Boot). Covers all endpoints from the README's API Endpoint Summary, plus the validation-error and game-not-found error cases. Run the backend first (`mvn spring-boot:run` in backend/) and set the `baseUrl` collection variable if it isn't already http://localhost:8080.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "gameId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Games",
+      "item": [
+        {
+          "name": "Create game (Two Player)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"TWO_PLAYER\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/games", "host": ["{{baseUrl}}"], "path": ["api", "games"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('gameId', pm.response.json().gameId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create game (Vs Computer)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"VS_COMPUTER\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/games", "host": ["{{baseUrl}}"], "path": ["api", "games"] }
+          }
+        },
+        {
+          "name": "Create game (no body -> defaults to Two Player)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/games", "host": ["{{baseUrl}}"], "path": ["api", "games"] }
+          }
+        },
+        {
+          "name": "Get game state",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/games/{{gameId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "games", "{{gameId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get game state (unknown id -> 404 GAME_NOT_FOUND)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/games/does-not-exist",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "games", "does-not-exist"]
+            }
+          }
+        },
+        {
+          "name": "Submit move (row/col)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"player\": \"X\",\n  \"row\": 1,\n  \"col\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/games/{{gameId}}/moves",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "games", "{{gameId}}", "moves"]
+            }
+          }
+        },
+        {
+          "name": "Submit move (cellIndex)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"player\": \"O\",\n  \"cellIndex\": 0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/games/{{gameId}}/moves",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "games", "{{gameId}}", "moves"]
+            }
+          }
+        },
+        {
+          "name": "Submit move (missing player -> 400 VALIDATION_ERROR)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"row\": 0,\n  \"col\": 0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/games/{{gameId}}/moves",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "games", "{{gameId}}", "moves"]
+            }
+          }
+        },
+        {
+          "name": "Submit move (row out of range -> 400 VALIDATION_ERROR)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"player\": \"X\",\n  \"row\": 9,\n  \"col\": 0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/games/{{gameId}}/moves",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "games", "{{gameId}}", "moves"]
+            }
+          }
+        },
+        {
+          "name": "Submit move (occupied cell -> 400 INVALID_MOVE)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"player\": \"X\",\n  \"row\": 1,\n  \"col\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/games/{{gameId}}/moves",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "games", "{{gameId}}", "moves"]
+            },
+            "description": "Run this twice at the same cell in a row to trigger 400 INVALID_MOVE on the second call."
+          }
+        },
+        {
+          "name": "Undo last move",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/games/{{gameId}}/undo",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "games", "{{gameId}}", "undo"]
+            }
+          }
+        },
+        {
+          "name": "Reset game",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/games/{{gameId}}/reset",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "games", "{{gameId}}", "reset"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scoreboard",
+      "item": [
+        {
+          "name": "Get scoreboard",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/scoreboard", "host": ["{{baseUrl}}"], "path": ["api", "scoreboard"] }
+          }
+        },
+        {
+          "name": "Reset scoreboard",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/scoreboard/reset",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "scoreboard", "reset"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

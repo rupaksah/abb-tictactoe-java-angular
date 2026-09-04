@@ -1,0 +1,20 @@
+<div class="board" role="grid" aria-label="Tic Tac Toe board">
+  @for (row of rows(); track row) {
+    <div class="board-row" role="row">
+      @for (col of cols(); track col) {
+        <button
+          type="button"
+          class="cell"
+          role="gridcell"
+          [class.winning]="isWinningCell(row, col)"
+          [class.filled]="board()[row][col] !== null"
+          [disabled]="disabled() || board()[row][col] !== null"
+          [attr.aria-label]="'Row ' + (row + 1) + ' Column ' + (col + 1) + (board()[row][col] ? ', ' + board()[row][col] : ', empty')"
+          (click)="onCellClick(row, col)"
+        >
+          {{ board()[row][col] ?? '' }}
+        </button>
+      }
+    </div>
+  }
+</div>
