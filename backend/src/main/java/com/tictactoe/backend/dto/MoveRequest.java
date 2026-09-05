@@ -4,6 +4,9 @@ import com.tictactoe.backend.model.Player;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * Body for POST /api/games/{id}/moves.
@@ -22,6 +25,9 @@ import jakarta.validation.constraints.NotNull;
  * InvalidMoveException in the README's error table) — bean validation is
  * for shape/range, not game rules.
  */
+@Getter
+@Setter
+@NoArgsConstructor
 public class MoveRequest {
     @NotNull(message = "player is required (X or O)")
     private Player player;
@@ -37,39 +43,4 @@ public class MoveRequest {
     @Min(value = 0, message = "cellIndex must be between 0 and 8")
     @Max(value = 8, message = "cellIndex must be between 0 and 8")
     private Integer cellIndex;
-
-    public MoveRequest() {
-    }
-
-    public Player getPlayer() {
-        return player;
-    }
-
-    public void setPlayer(Player player) {
-        this.player = player;
-    }
-
-    public Integer getRow() {
-        return row;
-    }
-
-    public void setRow(Integer row) {
-        this.row = row;
-    }
-
-    public Integer getCol() {
-        return col;
-    }
-
-    public void setCol(Integer col) {
-        this.col = col;
-    }
-
-    public Integer getCellIndex() {
-        return cellIndex;
-    }
-
-    public void setCellIndex(Integer cellIndex) {
-        this.cellIndex = cellIndex;
-    }
 }

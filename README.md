@@ -20,9 +20,9 @@ describes, with a Spring Boot REST API standing in for the .NET Web API.
 | Layer | Technology |
 |---|---|
 | Frontend | Angular 20 (standalone components, signals, `@if`/`@for` control flow), TypeScript |
-| Backend | Java 21, Spring Boot 3.3 (Spring Web), springdoc-openapi (Swagger UI) |
+| Backend | Java 21, Spring Boot 3.3 (Spring Web), springdoc-openapi (Swagger UI), Lombok |
 | API style | REST, JSON |
-| Storage | In-memory (`ConcurrentHashMap` of game sessions + a shared scoreboard) — no database |
+| Storage | In-memory (`ConcurrentHashMap` of game sessions + a shared scoreboard), optionally persisted to SQLite (`spring-boot-starter-jdbc` + `org.xerial:sqlite-jdbc`) with the schema managed by Flyway migrations, so games/the scoreboard survive a backend restart — see "SQLite Persistence" below |
 | Source control | Git / GitHub |
 
 ## Features Implemented
@@ -52,6 +52,11 @@ describes, with a Spring Boot REST API standing in for the .NET Web API.
 - Request-shape validation on `POST /api/games/{id}/moves` (missing
   `player`, or a `row`/`col`/`cellIndex` outside its valid range, is
   rejected with `400 VALIDATION_ERROR` before it reaches the game logic).
+- SQLite persistence for games and the scoreboard, so a backend restart
+  doesn't lose in-progress games or win/loss/draw counts (the problem
+  statement explicitly allows this as an alternative to plain in-memory
+  storage). See "SQLite Persistence" below for how it works and how to turn
+  it off.
 
 ## How to Run the Backend Locally
 
@@ -63,6 +68,22 @@ cd backend
 mvn spring-boot:run
 ```
 
+The DTOs (`backend/.../dto`) and `GameService`'s logger use
+[Lombok](https://projectlombok.org/) (`@Getter`/`@Setter`/
+`@NoArgsConstructor`/`@AllArgsConstructor`/`@Slf4j`) to cut boilerplate.
+Command-line `mvn`/`mvn test` need nothing extra — annotation processing
+happens automatically. **If you open this in an IDE** (IntelliJ, Eclipse,
+VS Code), install that IDE's Lombok plugin/support and enable annotation
+processing, or the DTO fields will show false "cannot find symbol"
+errors for methods like `getGameId()` that Lombok generates at compile
+time (IntelliJ: `Settings → Plugins → Lombok`, then
+`Settings → Build → Compiler → Annotation Processors → Enable annotation
+processing`). Lombok is deliberately *not* used in `backend/.../core` or
+`backend/.../model` (`Board`, `GameSession`, `Scoreboard`, `Move`, the
+enums) — those stay plain Java on purpose, so they keep compiling and
+running with nothing but `javac`/`java` (see "AI Tools and Prompt
+Summary").
+
 The API starts on **http://localhost:8080**. CORS is pre-configured to
 allow requests from `http://localhost:4200` (the Angular dev server).
 
@@ -70,6 +91,68 @@ Interactive API docs (Swagger UI) are at **http://localhost:8080/swagger-ui.html
 generated automatically from the controllers — the raw OpenAPI JSON is at
 `/v3/api-docs`. Useful for the panel to poke at the API directly without
 the frontend, or without reading the table below.
+
+### SQLite Persistence
+
+By default, every game and the scoreboard are written through to a SQLite
+file (`backend/tictactoe.db`, created automatically on first run) after
+every create/move/undo/reset, and reloaded from it when the backend starts
+back up — so stopping and restarting `mvn spring-boot:run` no longer loses
+in-progress games or win/loss/draw counts. This is on top of, not instead
+of, the in-memory `ConcurrentHashMap`: the map is still what every request
+reads from while the process is running, and SQLite is purely the
+across-restart backing store.
+
+How it's wired:
+
+- `spring-boot-starter-jdbc` + `org.xerial:sqlite-jdbc` (plain
+  `JdbcTemplate`, not JPA/Hibernate — this avoids depending on a Hibernate
+  SQLite dialect and keeps every query as plain, reviewable SQL).
+- The schema is a Flyway migration,
+  `backend/src/main/resources/db/migration/V1__init_schema.sql`, defining
+  the two tables (`games`, `scoreboard`). Flyway runs it automatically at
+  startup and tracks what's been applied in a `flyway_schema_history` table
+  (`spring.flyway.enabled=true` in `application.yml`), rather than
+  re-running an idempotent script on every boot the way the project's first
+  cut at this (plain `schema.sql` + `spring.sql.init.mode=always`) did.
+  `spring.flyway.baseline-on-migrate=true` lets Flyway adopt a
+  `tictactoe.db` that already has these tables from that earlier approach,
+  by recording a baseline instead of failing with "found non-empty schema".
+- The board, winning cells, and move history are stored as small
+  hand-rolled delimited strings (`com.tictactoe.backend.persistence.GameStateCodec`),
+  not JSON — deliberately independent of Jackson, so this layer can't be
+  broken by the same kind of bean-naming mismatch documented under
+  "AI Tools and Prompt Summary" below.
+- Writes are best-effort: if SQLite is unavailable or a write fails, the
+  error is logged and swallowed rather than failing the API request, so a
+  disk/DB problem degrades to in-memory-only behavior instead of taking the
+  app down.
+- **Undo history is not persisted.** A game reloaded after a restart can
+  still be played, reset, and undone going forward, but any moves it had
+  queued up for Undo before the restart are gone — Undo only ever un-does
+  moves made since the backend last started. This is called out again under
+  Known Limitations.
+- To disable persistence entirely and go back to pure in-memory storage,
+  set `app.persistence.enabled=false` (e.g.
+  `mvn spring-boot:run -Dspring-boot.run.arguments=--app.persistence.enabled=false`,
+  or as an environment variable) — nothing else needs to change.
+- To start over with a clean scoreboard/game list, stop the backend and
+  delete `backend/tictactoe.db` (it's git-ignored and recreated
+  automatically on next startup).
+- **If `mvn compile`/`mvn spring-boot:run` fails specifically on the
+  `flyway-database-sqlite` dependency** (can't resolve it, or a version
+  mismatch against the Flyway version Spring Boot 3.3.4 manages — this is
+  the one genuinely unverified piece of this addition, since it was never
+  resolved against real Maven Central in the sandbox this was built in):
+  the fastest fix is to remove that one `<dependency>` block from
+  `pom.xml` and revert `application.yml`'s `spring.flyway` block back to
+  `spring.sql.init.mode: always` pointing at a restored `schema.sql`
+  (identical content to `V1__init_schema.sql`, just without the Flyway
+  header comment) — that's exactly the setup from the previous round,
+  known to compile-check clean. Everything else in this section (the
+  `GamePersistenceRepository`/`GameStateCodec` code, the `app.persistence.enabled`
+  flag) is unaffected either way, since it only depends on the datasource
+  being connected, not on how the schema was created.
 
 ## How to Run the Frontend Locally
 
@@ -262,7 +345,7 @@ directive from the requester: **"build it with Java as the backend."**
      the coordinates/version resolve cleanly at all. **Confirmed working**
      by the requester running `mvn spring-boot:run` and opening
      `/swagger-ui.html` locally.
-  8. A final round added Bean Validation (`spring-boot-starter-validation`,
+  8. A further round added Bean Validation (`spring-boot-starter-validation`,
      `jakarta.validation.constraints` on `MoveRequest`, `@Valid` on the move
      endpoint, and a `MethodArgumentNotValidException` handler in
      `GlobalExceptionHandler`) plus two new `GameControllerTest` cases for
@@ -289,6 +372,59 @@ directive from the requester: **"build it with Java as the backend."**
      (with a new `JsonProperty` stub added). **This fix has not yet been
      re-confirmed by an actual `mvn test` run** — that's the immediate next
      step before treating it as done; see "Known Limitations."
+  10. A final round added SQLite persistence for games and the scoreboard
+      (`spring-boot-starter-jdbc` + `org.xerial:sqlite-jdbc`, a `schema.sql`,
+      a new `com.tictactoe.backend.persistence` package, restore
+      constructors/methods on `Board`/`GameSession`/`Scoreboard`, and
+      write-through calls from `GameService`) — see "SQLite Persistence"
+      above for the design. This was compile-checked against hand-written
+      stubs of `JdbcTemplate`/`RowMapper`/`@Repository`/`@Value`/
+      `@PostConstruct`, same caveat as every other Spring-facing addition.
+      Unlike the Spring-facing pieces, though, the actual encode/decode/
+      restore logic (`Board.toEncoded`/`fromEncoded`,
+      `GameStateCodec`'s string round-trips, and the `GameSession` restore
+      constructor) is plain Java with zero framework dependency, so it *was*
+      exercised for real: a standalone harness played out in-progress, won,
+      and drawn games, round-tripped each through the exact encoding the
+      SQLite repository uses, and diffed the restored session against the
+      original — **47/47 checks passed** on the real JVM, not stubs. What
+      that harness can't cover is the actual SQL round-tripping through a
+      real SQLite file (`INSERT ... ON CONFLICT DO UPDATE`, the schema
+      auto-running, the JDBC driver/URL), since that needs the real
+      `sqlite-jdbc` dependency resolved — **not yet confirmed**; see "Known
+      Limitations."
+  11. A follow-up round replaced the previous round's `schema.sql`/
+      `spring.sql.init.mode=always` with a proper Flyway migration
+      (`db/migration/V1__init_schema.sql`, `flyway-core` +
+      `flyway-database-sqlite`), and added Lombok
+      (`@Getter`/`@Setter`/`@NoArgsConstructor`/`@AllArgsConstructor` on the
+      seven DTOs, `@Slf4j` on `GameService`) to cut hand-written
+      boilerplate. Lombok is deliberately scoped to the DTO/service layer
+      only, not `core`/`model` (see "How to Run the Backend Locally"), so
+      the framework-free game engine's standalone-`javac` verification
+      story from point 1 is untouched. Verification here needed a different
+      approach than the usual stub-compile: Lombok's annotations only do
+      anything under real annotation processing, which a hand-written stub
+      annotation can't emulate (a stub `@Getter` is just an inert marker -
+      it doesn't generate `getGameId()` etc.), so a fake-stub compile of
+      the DTOs' *callers* would fail in a way that's not actually
+      informative. Instead: (a) the seven real, Lombok-annotated DTO files
+      were compile-checked standalone against no-op Lombok stub annotations
+      to catch import/syntax/annotation-placement mistakes; (b)
+      hand-expanded "shadow" versions of the same DTOs - exactly the
+      getters/setters/constructors Lombok is documented to generate for
+      this annotation combination - were substituted in, and the *entire*
+      backend (`GameService`, both controllers, all existing tests) was
+      compiled against those shadow DTOs plus the usual Spring stubs: a
+      clean compile there confirms every call site in the codebase is
+      compatible with the API shape Lombok will produce. **Not yet
+      confirmed**: that Lombok's real annotation processor actually runs
+      cleanly in this exact Java 21 / Maven / Spring Boot 3.3.4
+      combination - extremely well-trodden in practice, but, like the
+      `flyway-database-sqlite` dependency above, never resolved against
+      real Maven Central in this sandbox. If either one doesn't "just
+      work," "SQLite Persistence" and this section both have the specific
+      fallback.
 - **What was changed manually**: nothing — this was reviewed but not
   hand-edited after generation. It's the AI-generated code as-is, so it
   should be reviewed with that in mind rather than presented as
@@ -348,8 +484,11 @@ directive from the requester: **"build it with Java as the backend."**
 - The Angular app auto-starts a Two Player game on load rather than
   showing a separate "start screen," to match "the UI should show: game
   board, current player, …" as an always-on-screen state.
-- No authentication, persistence beyond process lifetime, or multi-user
-  session isolation was in scope per "in-memory storage is acceptable."
+- No authentication or multi-user session isolation was in scope per
+  "in-memory storage is acceptable." Persistence beyond process lifetime
+  (SQLite) was later added on top of that in-memory default, since the spec
+  also explicitly allows it — see "SQLite Persistence" above; it doesn't
+  change the authentication/multi-user scope decision.
 
 ## Known Limitations
 
@@ -367,14 +506,24 @@ directive from the requester: **"build it with Java as the backend."**
   the same claim: the stub compile passed every time; only the real
   Jackson runtime exposed the bug. Plus, independent of any local run, the
   framework-free game engine via 49/49 real assertions in a standalone
-  harness. **Not yet independently re-confirmed**: the `@JsonProperty` fix
-  for xWins/oWins — run `mvn test` again and confirm
-  `ScoreboardControllerTest` now passes, and separately eyeball the
-  frontend's scoreboard display (win counts, not just the draws counter)
-  during a real game, since that's the field that was silently broken.
-- No persistence: restarting the backend clears all games and the
-  scoreboard (acceptable per the spec's "in-memory storage is
-  acceptable").
+  harness. **Confirmed by the requester running locally**: the
+  `@JsonProperty` fix for xWins/oWins (`ScoreboardControllerTest` passes,
+  and the frontend's win-count display is correct in a real game), and
+  SQLite persistence (point 10) - games/the scoreboard survive a
+  `mvn spring-boot:run` restart. **Not yet confirmed**: the Flyway
+  migration and Lombok added in point 11 - both are new Maven dependencies
+  never resolved against real Maven Central in the sandbox (see "SQLite
+  Persistence" and point 11 for exactly what was and wasn't possible to
+  verify there, and the fallback if either doesn't resolve cleanly). Run
+  `mvn spring-boot:run` fresh and confirm: the app starts without a Flyway
+  error, a `flyway_schema_history` table appears in `tictactoe.db`
+  alongside `games`/`scoreboard`, and (in an IDE) that Lombok-generated
+  methods like `getGameId()` resolve without the Lombok plugin producing
+  false errors.
+- Persistence covers games and the scoreboard, but not undo history: a game
+  reloaded after a backend restart can still be played/reset/undone going
+  forward, but any moves it had queued for Undo before the restart are
+  gone.
 - No reconnect/multi-tab story: the frontend holds one active `gameId` in
   memory; refreshing the browser starts a new game rather than resuming.
 - The API base URL (`http://localhost:8080/api`) is hardcoded in
@@ -388,8 +537,6 @@ directive from the requester: **"build it with Java as the backend."**
 - A `Dockerfile`/`docker-compose.yml` so the whole stack runs with one
   command instead of two terminals.
 - Environment-based API URL configuration for non-local deployments.
-- Optional SQLite persistence for games/scoreboard across restarts (the
-  spec allows this).
 - A minimax-based "hard" computer difficulty alongside the current
   priority-rule opponent.
 - WebSocket/SSE push for a real two-browser-tab multiplayer experience

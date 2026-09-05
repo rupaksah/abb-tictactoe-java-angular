@@ -52,6 +52,30 @@ public final class GameSession {
     }
 
     /**
+     * Restore constructor: rebuilds a session from state persisted in
+     * SQLite, bypassing the normal "fresh game" initialization above. The
+     * undo stack is deliberately NOT restored - undo history does not
+     * survive a backend restart (documented in the README's Known
+     * Limitations), so a restored game always starts with an empty undo
+     * stack even if it had pending undos before shutdown.
+     */
+    public GameSession(String id, GameMode mode, Scoreboard scoreboard, Board board,
+                        Player currentPlayer, GameStatus status, Player winner,
+                        List<int[]> winningCells, List<Move> moveHistory, boolean scoreCounted) {
+        this.id = id;
+        this.mode = mode;
+        this.scoreboard = scoreboard;
+        this.board = board;
+        this.currentPlayer = currentPlayer;
+        this.status = status;
+        this.winner = winner;
+        this.winningCells = winningCells;
+        this.moveHistory = moveHistory;
+        this.undoStack = new ArrayList<>();
+        this.scoreCounted = scoreCounted;
+    }
+
+    /**
      * Applies a move submitted by `player` at (row, col). In VS_COMPUTER
      * mode, if the human's move doesn't end the game, the computer's reply
      * is computed and applied automatically as part of the same call, so
@@ -205,6 +229,11 @@ public final class GameSession {
 
     public List<Move> getMoveHistory() {
         return Collections.unmodifiableList(moveHistory);
+    }
+
+    /** Whether this game's result has already been recorded on the scoreboard (used for persistence). */
+    public boolean isScoreCounted() {
+        return scoreCounted;
     }
 
     /** Nested, immutable-in-practice snapshot used purely for undo. */

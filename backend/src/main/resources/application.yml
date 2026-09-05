@@ -1,6 +1,24 @@
 spring:
   application:
     name: tictactoe-backend
+  datasource:
+    url: jdbc:sqlite:tictactoe.db
+    driver-class-name: org.sqlite.JDBC
+  flyway:
+    enabled: true
+    # Lets Flyway adopt a tictactoe.db file that already has the games/
+    # scoreboard tables from before this migration existed (e.g. one created
+    # by the earlier schema.sql/spring.sql.init.mode approach), by recording
+    # a baseline instead of failing with "found non-empty schema".
+    baseline-on-migrate: true
+    locations: classpath:db/migration
 
 server:
   port: 8080
+
+app:
+  persistence:
+    # Games and the scoreboard are persisted to the SQLite file above and
+    # reloaded on restart. Set to false (e.g. via an environment variable)
+    # to fall back to pure in-memory storage without touching anything else.
+    enabled: true

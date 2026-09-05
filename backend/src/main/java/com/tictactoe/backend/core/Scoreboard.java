@@ -33,6 +33,13 @@ public final class Scoreboard {
         draws.set(0);
     }
 
+    /** Overwrites the counters with persisted values (used to restore state from SQLite on startup). */
+    public void restore(int xWins, int oWins, int draws) {
+        this.xWins.set(xWins);
+        this.oWins.set(oWins);
+        this.draws.set(draws);
+    }
+
     public int getXWins() {
         return xWins.get();
     }
